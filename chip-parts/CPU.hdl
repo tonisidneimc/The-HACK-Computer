@@ -1,0 +1,120 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/05/CPU.hdl
+
+/**
+ * The Hack CPU (Central Processing unit), consisting of an ALU,
+ * two registers named A and D, and a program counter named PC.
+ * The CPU is designed to fetch and execute instructions written in 
+ * the Hack machine language. In particular, functions as follows:
+ * Executes the inputted instruction according to the Hack machine 
+ * language specification. The D and A in the language specification
+ * refer to CPU-resident registers, while M refers to the external
+ * memory location addressed by A, i.e. to Memory[A]. The inM input 
+ * holds the value of this location. If the current instruction needs 
+ * to write a value to M, the value is placed in outM, the address 
+ * of the target location is placed in the addressM output, and the 
+ * writeM control bit is asserted. (When writeM==0, any value may 
+ * appear in outM). The outM and writeM outputs are combinational: 
+ * they are affected instantaneously by the execution of the current 
+ * instruction. The addressM and pc outputs are clocked: although they 
+ * are affected by the execution of the current instruction, they commit 
+ * to their new values only in the next time step. If reset==1 then the 
+ * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather 
+ * than to the address resulting from executing the current instruction. 
+ */
+
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    // Put your code here:
+
+    // A instruction:
+    //	symbolic: @xxx (xxx is a decimal value ranging from 0 to 32767)
+    //	  bynary: 0vvvvvvvvvvvvvvv (vv..v = 15-bit value of xxx)
+    //
+    // C instruction:
+    // 	symbolic: dest = comp; jmp
+    //    binary: 111accccccdddjjj
+
+    Mux16(a=instruction, b=aluOut, sel=instruction[15], out=aIn);
+
+    Not(in=instruction[15], out=notInstruction); // true if is an @value instruction
+    // in A-instruction load the A register
+    // in C-instruction, if bit 5 is set, then load the A register
+    Or(a=notInstruction, b=instruction[5], out=loadA);
+    ARegister(in=aIn, load=loadA, out=aOut, out[0..14]=addressM);
+
+    // if a == 0 select A register, else if a == 1 select inM 
+    Mux16(a=aOut, b=inM, sel=instruction[12], out=amOut);
+
+    // in C-instruction, if bit 4 is set, then load the D register
+    And(a=instruction[15], b=instruction[4], out=loadD);
+    DRegister(in=aluOut, load=loadD, out=dOut);
+
+    //And(a=instruction[15], b=)
+
+    ALU(x=dOut, y=amOut, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=aluOut, out=outM, zr=aluzrOut, ng=alungOut);
+
+    // in C-instruction, if bit 3 is set, then load the memory pointed by A register
+    And(a=instruction[15], b=instruction[3], out=writeM);
+    														  // jjj
+    And(a=instruction[15], b=instruction[0], out=toGreater);  // 001
+    And(a=instruction[15], b=instruction[1], out=toEqual);    // 010
+    And(a=instruction[15], b=instruction[2], out=toLess);     // 100
+    
+    Not(in=instruction[1], out=notequal);
+    And(a=toGreater, b=instruction[2], out=bitNE);
+    And(a=bitNE, b=notequal, out=toNotEqual);       		  // 101
+
+    And(a=toGreater, b=toEqual, out=toGreaterEqual);		  // 011
+    And(b=toLess, b=toEqual, out=toLessEqual);				  // 110
+
+    And(a=toLessEqual, b=instruction[0], out=jmp);			  // 111
+
+    Not(in=aluzrOut, out=notzr);
+    Not(in=alungOut, out=notng);
+
+    // LT (a < b) if ng is set and zr is not set
+    And(a=notzr, b=alungOut, out=isLess);
+    And(a=toLess, b=isLess, out=jlt);
+
+    // GE !(a < b) if ng is not set or zr is set
+    Not(in=isLess, out=isGreaterEqual);
+    And(a=toGreaterEqual, b=isGreaterEqual, out=jge);
+
+    // EQ (a = b) if zr is set
+    And(a=toEqual, b=aluzrOut, out=jeq);
+
+    // NEQ (a != b) if zr is not set
+    And(a=toNotEqual, b=notzr, out=jne);
+
+    // GT (a > b) if ng is not set and zr is not set
+    And(a=notzr, b=notng, out=isGreater);
+    And(a=toGreater, b=isGreater, out=jgt); 
+
+    // LE !(a > b) if ng is set or zr is set
+    Not(in=isGreater, out=isLessEqual);
+    And(a=toLessEqual, b=isLessEqual, out=jle);
+
+    Or8Way(in[0]=jmp, in[1]=jlt, in[2]=jge, in[3]=jeq, in[4]=jne, in[5]=jgt, in[6]=jle, in[7]=false, out=loadPC);
+
+    // if (reset == 1) PC = 0
+    // else
+    // 		load = f(jump bits, ALU control outputs)
+    // 		if (load == 1) PC = A
+    //		else PC++
+    PC(in=aOut, load=loadPC, inc=true, reset=reset, out[0..14]=pc);
+}

@@ -1,0 +1,15 @@
+//
+/**
+ * check if all input is zero 
+ * out = (in[0] nor in[1] nor ... nor in[15])
+ */
+
+CHIP IsZero16 {
+    IN in[16];
+    OUT out;
+
+    PARTS:
+    // using the Nor gate logic
+    Or16Way(in[0..15]=in, out=nonzero); // false if input is all zeros
+    Not(in=nonzero, out=out); // invert output to be true if all zeros
+}

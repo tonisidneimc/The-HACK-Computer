@@ -1,0 +1,13 @@
+//
+/**
+ * check if input is a negative value 
+ * out = 1 if MSB bit of input is 1 and 0 otherwise 
+ */
+
+CHIP IsNeg16 {
+    IN in[16];
+    OUT out;
+
+    PARTS:
+    And(a=in[15], b=true, out=out);
+}
